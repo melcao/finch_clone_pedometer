@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lottie/lottie.dart';
-import 'package:pedometer/pedometer.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import '../models/finch_model.dart';
+import '../services/pedometer_service.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 
 class WalkingScreen extends StatefulWidget {
@@ -16,16 +16,17 @@ class WalkingScreen extends StatefulWidget {
   State<WalkingScreen> createState() => _WalkingScreenState();
 }
 
-class _WalkingScreenState extends State<WalkingScreen> with SingleTickerProviderStateMixin {
-  StreamSubscription<StepCount>? _stepCountStream;
+class _WalkingScreenState extends State<WalkingScreen> with TickerProviderStateMixin {
+  final _pedometerService = PedometerService();
+  StreamSubscription<int>? _stepSubscription;
   int _steps = 0;
-  int _initialSteps = 0;
   bool _isWalking = false;
   Timer? _walkingTimer;
   late final AnimationController _idleController;
   late final AnimationController _walkingController;
   bool _isSimulator = false;
   final FocusNode _focusNode = FocusNode();
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -79,8 +80,56 @@ class _WalkingScreenState extends State<WalkingScreen> with SingleTickerProvider
     setState(() {
       _steps++;
       _isWalking = true;
+      _errorMessage = null;
     });
     
+    _updateWalkingState();
+  }
+
+  Future<void> _initPedometer() async {
+    if (Platform.isAndroid) {
+      final status = await Permission.activityRecognition.request();
+      if (!status.isGranted) {
+        _showPermissionDeniedDialog();
+        return;
+      }
+    }
+
+    try {
+      await _pedometerService.initialize();
+      
+      _stepSubscription = _pedometerService.stepStream.listen(
+        (steps) {
+          if (mounted) {
+            setState(() {
+              _steps = steps;
+              _isWalking = true;
+              _errorMessage = null;
+            });
+            _updateWalkingState();
+          }
+        },
+        onError: (error) {
+          if (mounted) {
+            setState(() {
+              _errorMessage = 'Unable to track steps: $error';
+            });
+          }
+        },
+      );
+      
+      debugPrint('Pedometer initialized and listening');
+    } catch (e) {
+      debugPrint('Error initializing pedometer: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to initialize step tracking: $e';
+        });
+      }
+    }
+  }
+
+  void _updateWalkingState() {
     _walkingTimer?.cancel();
     _walkingTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) {
@@ -97,54 +146,6 @@ class _WalkingScreenState extends State<WalkingScreen> with SingleTickerProvider
       _walkingController.stop();
       _idleController.repeat();
     }
-  }
-
-  Future<void> _initPedometer() async {
-    if (Platform.isAndroid) {
-      final status = await Permission.activityRecognition.request();
-      if (!status.isGranted) {
-        _showPermissionDeniedDialog();
-        return;
-      }
-    }
-
-    _stepCountStream = Pedometer.stepCountStream.listen(
-      (StepCount event) {
-        if (_initialSteps == 0) {
-          _initialSteps = event.steps;
-        }
-        
-        if (mounted) {
-          setState(() {
-            _steps = event.steps - _initialSteps;
-            _isWalking = true;
-          });
-          
-          _walkingTimer?.cancel();
-          _walkingTimer = Timer(const Duration(seconds: 2), () {
-            if (mounted) {
-              setState(() {
-                _isWalking = false;
-              });
-            }
-          });
-
-          if (_isWalking) {
-            _idleController.stop();
-            _walkingController.repeat();
-          } else {
-            _walkingController.stop();
-            _idleController.repeat();
-          }
-        }
-      },
-      onError: onStepCountError,
-      cancelOnError: true,
-    );
-  }
-
-  void onStepCountError(error) {
-    debugPrint('Step count error: $error');
   }
 
   void _showPermissionDeniedDialog() {
@@ -210,6 +211,17 @@ class _WalkingScreenState extends State<WalkingScreen> with SingleTickerProvider
                           'Simulator Mode: Press SPACE to simulate steps',
                           style: TextStyle(
                             color: Colors.grey[600],
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    if (_errorMessage != null)
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text(
+                          _errorMessage!,
+                          style: TextStyle(
+                            color: Colors.red[700],
                             fontSize: 14,
                           ),
                         ),
@@ -302,7 +314,8 @@ class _WalkingScreenState extends State<WalkingScreen> with SingleTickerProvider
 
   @override
   void dispose() {
-    _stepCountStream?.cancel();
+    _stepSubscription?.cancel();
+    _pedometerService.dispose();
     _walkingTimer?.cancel();
     _idleController.dispose();
     _walkingController.dispose();
