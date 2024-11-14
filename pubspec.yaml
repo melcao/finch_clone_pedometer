@@ -1,0 +1,46 @@
+name: finch_care
+description: A Flutter app for taking care of your virtual finch
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.0.5
+  shared_preferences: ^2.2.2
+  cupertino_icons: ^1.0.2
+  google_fonts: ^5.1.0
+  lottie: ^2.6.0
+  pedometer: ^4.0.1
+  permission_handler: ^10.4.3
+  device_info_plus: ^9.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/animations/
+    - assets/images/cow.png
+    - assets/images/tree.jpg
+    - assets/images/home_icon.png
+    - assets/images/quests_icon.png
+    - assets/images/shop_icon.png
+    - assets/images/friends_icon.png
+    - assets/images/bag_icon.png
+    - assets/images/birb_icon.png
+    - assets/animations/birb_winking.json
+    - assets/animations/birb_sweeping_loop.json
+  fonts:
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito-Regular.ttf
+        - asset: assets/fonts/Nunito-Bold.ttf
+          weight: 700
